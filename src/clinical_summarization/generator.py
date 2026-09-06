@@ -48,8 +48,9 @@ def stub_generate_section(section: str, lines: list[SourceLine]) -> list[Generat
 
 
 class LLMGenerator:
-    """Real generator backend. Requires `pip install anthropic` and an
-    ANTHROPIC_API_KEY (or another credential source the SDK resolves)."""
+    """Real generator backend (Anthropic Claude). Requires `pip install
+    anthropic` and an ANTHROPIC_API_KEY (or another credential source the
+    SDK resolves)."""
 
     def __init__(self, client=None, model: str = DEFAULT_GENERATOR_MODEL):
         import anthropic
@@ -78,6 +79,49 @@ class LLMGenerator:
             output_format=_SectionDraft,
         )
         draft = response.parsed_output
+        valid_line_nos = {line.line_no for line in lines}
+        return [
+            GeneratedSentence(text=s.text, source_lines=(s.source_line,), section=section)
+            for s in draft.sentences
+            if s.source_line in valid_line_nos
+        ]
+
+
+DEFAULT_GEMINI_GENERATOR_MODEL = "gemini-2.5-flash"
+
+
+class GeminiGenerator:
+    """Alternative generator backend (Google Gemini), same interface as
+    `LLMGenerator`. Requires `pip install google-genai` and a
+    GEMINI_API_KEY/GOOGLE_API_KEY (or another credential source the SDK
+    resolves)."""
+
+    def __init__(self, client=None, model: str = DEFAULT_GEMINI_GENERATOR_MODEL):
+        from google import genai
+
+        self.client = client or genai.Client()
+        self.model = model
+
+    def generate_section(self, section: str, lines: list[SourceLine]) -> list[GeneratedSentence]:
+        if not lines:
+            return []
+
+        from google.genai import types
+
+        source_block = "\n".join(f"line {line.line_no}: {line.text}" for line in lines)
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=(
+                f"Section: {section}\n\nSource lines:\n{source_block}\n\n"
+                "Draft the sentences for this section."
+            ),
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=_SectionDraft,
+            ),
+        )
+        draft: _SectionDraft = response.parsed
         valid_line_nos = {line.line_no for line in lines}
         return [
             GeneratedSentence(text=s.text, source_lines=(s.source_line,), section=section)

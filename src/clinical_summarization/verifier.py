@@ -70,9 +70,10 @@ def stub_verify(sentence: GeneratedSentence, cited_lines: list[SourceLine]) -> V
 
 
 class LLMVerifier:
-    """Real verifier backend. Defaults to a different model than
-    `LLMGenerator` by design. Requires `pip install anthropic` and an
-    ANTHROPIC_API_KEY (or another credential source the SDK resolves)."""
+    """Real verifier backend (Anthropic Claude). Defaults to a different
+    model than `LLMGenerator` by design. Requires `pip install anthropic`
+    and an ANTHROPIC_API_KEY (or another credential source the SDK
+    resolves)."""
 
     def __init__(self, client=None, model: str = DEFAULT_VERIFIER_MODEL):
         import anthropic
@@ -98,4 +99,39 @@ class LLMVerifier:
             output_format=_EntailmentVerdict,
         )
         result = response.parsed_output
+        return VerifierVerdict(sentence=sentence, entailed=result.entailed, reason=result.reason)
+
+
+DEFAULT_GEMINI_VERIFIER_MODEL = "gemini-2.5-flash"
+
+
+class GeminiVerifier:
+    """Alternative verifier backend (Google Gemini), same interface as
+    `LLMVerifier`. Requires `pip install google-genai` and a
+    GEMINI_API_KEY/GOOGLE_API_KEY (or another credential source the SDK
+    resolves)."""
+
+    def __init__(self, client=None, model: str = DEFAULT_GEMINI_VERIFIER_MODEL):
+        from google import genai
+
+        self.client = client or genai.Client()
+        self.model = model
+
+    def verify(self, sentence: GeneratedSentence, cited_lines: list[SourceLine]) -> VerifierVerdict:
+        if not _check_citation(sentence, cited_lines):
+            return VerifierVerdict(sentence=sentence, entailed=False, reason=_CITATION_MISMATCH_REASON)
+
+        from google.genai import types
+
+        source_block = "\n".join(f"line {line.line_no}: {line.text}" for line in cited_lines)
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=f"Source lines:\n{source_block}\n\nClaim: {sentence.text}",
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=_EntailmentVerdict,
+            ),
+        )
+        result: _EntailmentVerdict = response.parsed
         return VerifierVerdict(sentence=sentence, entailed=result.entailed, reason=result.reason)

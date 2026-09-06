@@ -6,11 +6,12 @@ citation-only) -> coverage check (deterministic gate) -> open-loop detection.
 
 Generator and verifier are injected as callables so this stays a vertical
 slice of the *architecture*, not a fixture of any one backend: pass the
-deterministic stubs (offline, free, used in tests) or `LLMGenerator`/
-`LLMVerifier` (real model calls, different models by default per
-docs/design.md Section 2). No review UI, no audit log persistence, no
-control plane yet — this proves the shape, especially that an unsupported
-claim cannot silently reach the draft, before those layers are built.
+deterministic stubs (offline, free, used in tests), `LLMGenerator`/
+`LLMVerifier` (Claude), or `GeminiGenerator`/`GeminiVerifier` (Gemini) —
+different models by default per docs/design.md Section 2. No review UI, no
+audit log persistence, no control plane yet — this proves the shape,
+especially that an unsupported claim cannot silently reach the draft,
+before those layers are built.
 """
 
 from __future__ import annotations
@@ -29,8 +30,11 @@ from clinical_summarization.coverage import check_coverage
 GenerateSectionFn = Callable[[str, list[SourceLine]], list[GeneratedSentence]]
 VerifyFn = Callable[[GeneratedSentence, list[SourceLine]], VerifierVerdict]
 
+_LIVE_BACKENDS = {"live", "claude"}
+_GEMINI_BACKENDS = {"gemini"}
 
-def _live_backends() -> tuple[GenerateSectionFn, VerifyFn]:
+
+def _claude_backends() -> tuple[GenerateSectionFn, VerifyFn]:
     from clinical_summarization.generator import LLMGenerator
     from clinical_summarization.verifier import LLMVerifier
 
@@ -39,12 +43,24 @@ def _live_backends() -> tuple[GenerateSectionFn, VerifyFn]:
     return generator.generate_section, verifier.verify
 
 
+def _gemini_backends() -> tuple[GenerateSectionFn, VerifyFn]:
+    from clinical_summarization.generator import GeminiGenerator
+    from clinical_summarization.verifier import GeminiVerifier
+
+    generator = GeminiGenerator()
+    verifier = GeminiVerifier()
+    return generator.generate_section, verifier.verify
+
+
 def default_backends() -> tuple[GenerateSectionFn, VerifyFn]:
     """Backend selection is explicit opt-in to a paid API: set
-    CLINICAL_SUMMARIZATION_BACKEND=live, or pass callables directly to
-    run_pipeline. Defaults to the free, offline stubs."""
-    if os.environ.get("CLINICAL_SUMMARIZATION_BACKEND", "stub").lower() == "live":
-        return _live_backends()
+    CLINICAL_SUMMARIZATION_BACKEND=live|claude|gemini, or pass callables
+    directly to run_pipeline. Defaults to the free, offline stubs."""
+    backend = os.environ.get("CLINICAL_SUMMARIZATION_BACKEND", "stub").lower()
+    if backend in _LIVE_BACKENDS:
+        return _claude_backends()
+    if backend in _GEMINI_BACKENDS:
+        return _gemini_backends()
     return stub_generate_section, stub_verify
 
 
