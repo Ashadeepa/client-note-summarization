@@ -32,6 +32,24 @@ pytest -q
 
 To try your own note, write a text file using the same `line N — text` format as `examples/sample_note.txt` and pass its path instead.
 
+### Review UI (local)
+
+A small React app for trying the pipeline interactively — paste/edit a note, pick a backend, see the draft with citations, coverage flags, and open loops rendered.
+
+```bash
+# terminal 1 — API server
+source .venv/bin/activate
+pip install -e ".[dev,gemini,server]"
+uvicorn clinical_summarization.api:app --port 8010
+
+# terminal 2 — frontend
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. Live backends (Claude/Gemini) need the corresponding API key set in the terminal running `uvicorn` before you start it. The API has no send/export endpoint — draft-only, per docs/design.md Section 3.
+
 ## Docs
 
 - [`docs/design.md`](./docs/design.md) — full system design: requirement framing, architecture and AI leverage, the control plane, dev-to-deployment and data migration, a worked end-to-end use case, and business handoff.

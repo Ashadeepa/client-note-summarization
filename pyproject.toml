@@ -8,6 +8,7 @@ dependencies = ["anthropic>=0.69"]
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 gemini = ["google-genai>=1.0"]
+server = ["fastapi>=0.115", "uvicorn>=0.30"]
 
 [build-system]
 requires = ["setuptools>=68"]
