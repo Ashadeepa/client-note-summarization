@@ -1,10 +1,20 @@
-from clinical_summarization.pipeline import run_pipeline
+from clinical_summarization import pipeline as pipeline_module
+from clinical_summarization.generator import GeneratedSentence, stub_generate_section
+from clinical_summarization.verifier import stub_verify
 
 NOTE = """
 line 42 — Metformin 500mg BID, continued on discharge.
 line 58 — CT chest ordered 3/2 for persistent cough.
 line 61 — Pt tolerating oral intake well, ambulating independently.
 """
+
+
+def run_pipeline(raw_note: str = NOTE):
+    """Runs the pipeline pinned to the offline stub backend, regardless of
+    CLINICAL_SUMMARIZATION_BACKEND, so tests stay deterministic and free."""
+    return pipeline_module.run_pipeline(
+        raw_note, generate_section=stub_generate_section, verify=stub_verify
+    )
 
 
 def test_generates_citation_bound_sentence_for_medication():
@@ -45,9 +55,7 @@ def test_open_loop_detects_ct_chest_with_no_result():
 
 
 def test_verifier_rejects_unsupported_claim():
-    from clinical_summarization.generator import GeneratedSentence
     from clinical_summarization.ingest import parse_note
-    from clinical_summarization.verifier import verify
 
     lines = parse_note(NOTE)
     line_42 = next(l for l in lines if l.line_no == 42)
@@ -56,5 +64,5 @@ def test_verifier_rejects_unsupported_claim():
         source_lines=(42,),
         section="discharge_medications",
     )
-    verdict = verify(fabricated, [line_42])
+    verdict = stub_verify(fabricated, [line_42])
     assert not verdict.entailed

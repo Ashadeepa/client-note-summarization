@@ -4,24 +4,60 @@ Mirrors the walkthrough in docs/design.md, Section 5: ingest -> section
 extraction -> generation (citation-bound) -> verification (independent,
 citation-only) -> coverage check (deterministic gate) -> open-loop detection.
 
-This is a vertical slice: one path through the architecture with mocked
-generator/verifier logic, no review UI, no audit log persistence, no control
-plane. It exists to prove the shape — especially that an unsupported claim
-cannot silently reach the draft — before any of those layers are built.
+Generator and verifier are injected as callables so this stays a vertical
+slice of the *architecture*, not a fixture of any one backend: pass the
+deterministic stubs (offline, free, used in tests) or `LLMGenerator`/
+`LLMVerifier` (real model calls, different models by default per
+docs/design.md Section 2). No review UI, no audit log persistence, no
+control plane yet — this proves the shape, especially that an unsupported
+claim cannot silently reach the draft, before those layers are built.
 """
 
 from __future__ import annotations
 
-from clinical_summarization.generator import generate_section
+import os
+from typing import Callable
+
+from clinical_summarization.generator import stub_generate_section
 from clinical_summarization.ingest import parse_note
-from clinical_summarization.models import DraftSummary, VerifierVerdict
+from clinical_summarization.models import DraftSummary, GeneratedSentence, SourceLine, VerifierVerdict
 from clinical_summarization.open_loop import find_open_loops
 from clinical_summarization.section_extraction import extract_sections
-from clinical_summarization.verifier import verify
+from clinical_summarization.verifier import stub_verify
 from clinical_summarization.coverage import check_coverage
 
+GenerateSectionFn = Callable[[str, list[SourceLine]], list[GeneratedSentence]]
+VerifyFn = Callable[[GeneratedSentence, list[SourceLine]], VerifierVerdict]
 
-def run_pipeline(raw_note: str) -> DraftSummary:
+
+def _live_backends() -> tuple[GenerateSectionFn, VerifyFn]:
+    from clinical_summarization.generator import LLMGenerator
+    from clinical_summarization.verifier import LLMVerifier
+
+    generator = LLMGenerator()
+    verifier = LLMVerifier()
+    return generator.generate_section, verifier.verify
+
+
+def default_backends() -> tuple[GenerateSectionFn, VerifyFn]:
+    """Backend selection is explicit opt-in to a paid API: set
+    CLINICAL_SUMMARIZATION_BACKEND=live, or pass callables directly to
+    run_pipeline. Defaults to the free, offline stubs."""
+    if os.environ.get("CLINICAL_SUMMARIZATION_BACKEND", "stub").lower() == "live":
+        return _live_backends()
+    return stub_generate_section, stub_verify
+
+
+def run_pipeline(
+    raw_note: str,
+    generate_section: GenerateSectionFn | None = None,
+    verify: VerifyFn | None = None,
+) -> DraftSummary:
+    if generate_section is None or verify is None:
+        default_generate, default_verify = default_backends()
+        generate_section = generate_section or default_generate
+        verify = verify or default_verify
+
     lines = parse_note(raw_note)
     lines_by_no = {line.line_no: line for line in lines}
     sections = extract_sections(lines)

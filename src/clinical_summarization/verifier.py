@@ -1,37 +1,55 @@
-"""Verification pass — stubbed, but architecturally independent of the generator.
+"""Verification pass — architecturally independent of the generator.
 
 Sees only the source lines a sentence cites — never the rest of the note, and
 never the generator's reasoning — so it can't rationalize a claim using
 context the citation didn't actually invoke (docs/design.md, Section 2). In
-production this is a separate model/model family from the generator, ideally
-an NLI-style entailment checker, precisely so a shared blind spot in one
-doesn't silently validate itself in the other.
+production this is a separate model/model family from the generator, so a
+shared blind spot in one doesn't silently validate itself in the other; the
+live verifier here defaults to a different model than `LLMGenerator`.
 
-The stub below approximates entailment with token overlap. It is not a real
-entailment check — it exists to prove the pipeline shape, not the accuracy.
+`stub_verify` approximates entailment with token overlap — a deterministic,
+offline stand-in with the same signature as `LLMVerifier.verify`, used in
+tests and as the default backend.
 """
 
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 from clinical_summarization.models import GeneratedSentence, SourceLine, VerifierVerdict
 
+DEFAULT_VERIFIER_MODEL = "claude-sonnet-5"
+
+_CITATION_MISMATCH_REASON = "citation mismatch: verifier was not given exactly the cited lines"
+
+_SYSTEM_PROMPT = (
+    "You check whether a claim is fully entailed by ONLY the source lines given "
+    "below. You have no access to the rest of the clinical note. If the claim "
+    "adds, changes, generalizes, or infers anything the lines don't literally "
+    "state, mark it not entailed."
+)
+
 _OVERLAP_THRESHOLD = 0.5
+
+
+class _EntailmentVerdict(BaseModel):
+    entailed: bool
+    reason: str
 
 
 def _tokens(text: str) -> set[str]:
     return {tok.strip(".,").lower() for tok in text.split() if tok.strip(".,")}
 
 
-def verify(sentence: GeneratedSentence, cited_lines: list[SourceLine]) -> VerifierVerdict:
+def _check_citation(sentence: GeneratedSentence, cited_lines: list[SourceLine]) -> bool:
     """cited_lines must be exactly the lines named in sentence.source_lines —
     the verifier is never handed the full note."""
-    cited_ids = {line.line_no for line in cited_lines}
-    if cited_ids != set(sentence.source_lines):
-        return VerifierVerdict(
-            sentence=sentence,
-            entailed=False,
-            reason="citation mismatch: verifier was not given exactly the cited lines",
-        )
+    return {line.line_no for line in cited_lines} == set(sentence.source_lines)
+
+
+def stub_verify(sentence: GeneratedSentence, cited_lines: list[SourceLine]) -> VerifierVerdict:
+    if not _check_citation(sentence, cited_lines):
+        return VerifierVerdict(sentence=sentence, entailed=False, reason=_CITATION_MISMATCH_REASON)
 
     source_tokens: set[str] = set()
     for line in cited_lines:
@@ -49,3 +67,35 @@ def verify(sentence: GeneratedSentence, cited_lines: list[SourceLine]) -> Verifi
         else f"token overlap {overlap:.2f} below threshold {_OVERLAP_THRESHOLD}"
     )
     return VerifierVerdict(sentence=sentence, entailed=entailed, reason=reason)
+
+
+class LLMVerifier:
+    """Real verifier backend. Defaults to a different model than
+    `LLMGenerator` by design. Requires `pip install anthropic` and an
+    ANTHROPIC_API_KEY (or another credential source the SDK resolves)."""
+
+    def __init__(self, client=None, model: str = DEFAULT_VERIFIER_MODEL):
+        import anthropic
+
+        self.client = client or anthropic.Anthropic()
+        self.model = model
+
+    def verify(self, sentence: GeneratedSentence, cited_lines: list[SourceLine]) -> VerifierVerdict:
+        if not _check_citation(sentence, cited_lines):
+            return VerifierVerdict(sentence=sentence, entailed=False, reason=_CITATION_MISMATCH_REASON)
+
+        source_block = "\n".join(f"line {line.line_no}: {line.text}" for line in cited_lines)
+        response = self.client.messages.parse(
+            model=self.model,
+            max_tokens=1024,
+            system=_SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Source lines:\n{source_block}\n\nClaim: {sentence.text}",
+                }
+            ],
+            output_format=_EntailmentVerdict,
+        )
+        result = response.parsed_output
+        return VerifierVerdict(sentence=sentence, entailed=result.entailed, reason=result.reason)

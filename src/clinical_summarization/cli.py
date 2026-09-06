@@ -7,17 +7,28 @@ in docs/design.md, Section 3.
 
 from __future__ import annotations
 
-import sys
+import argparse
 
 from clinical_summarization.pipeline import run_pipeline
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("usage: python -m clinical_summarization.cli <note_file>", file=sys.stderr)
-        raise SystemExit(1)
+    parser = argparse.ArgumentParser(description="Run the clinical note summarization pipeline.")
+    parser.add_argument("note_file")
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Call the real generator/verifier models instead of the offline stubs "
+        "(requires ANTHROPIC_API_KEY or another credential the SDK can resolve).",
+    )
+    args = parser.parse_args()
 
-    with open(sys.argv[1], encoding="utf-8") as f:
+    if args.live:
+        import os
+
+        os.environ["CLINICAL_SUMMARIZATION_BACKEND"] = "live"
+
+    with open(args.note_file, encoding="utf-8") as f:
         raw_note = f.read()
 
     draft = run_pipeline(raw_note)
