@@ -16,6 +16,9 @@ _TAG_RULES: dict[str, re.Pattern[str]] = {
     "medication": re.compile(r"\b(mg|bid|tid|qd|dose|continued on discharge)\b", re.I),
     "order": re.compile(r"\bordered\b", re.I),
     "functional_status": re.compile(r"\b(tolerating|ambulating|ambulatory)\b", re.I),
+    "follow_up": re.compile(
+        r"\b(follow-up|follow up|f/u|return to clinic|recheck|re-evaluate)\b", re.I
+    ),
 }
 
 

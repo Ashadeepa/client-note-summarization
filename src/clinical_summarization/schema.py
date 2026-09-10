@@ -8,6 +8,7 @@ from __future__ import annotations
 SECTION_ROUTING: dict[str, tuple[str, ...]] = {
     "discharge_medications": ("medication",),
     "hospital_course": ("functional_status",),
+    "follow_up_plan": ("follow_up",),
 }
 
 # every field a discharge summary must either cite or explicitly flag

@@ -42,7 +42,7 @@ text matches one of these regexes:
 |---|---|---|
 | `discharge_medications` | `mg`, `bid`, `tid`, `qd`, `dose`, or `continued on discharge` | `\b(mg\|bid\|tid\|qd\|dose\|continued on discharge)\b` |
 | `hospital_course` | `tolerating`, `ambulating`, or `ambulatory` | `\b(tolerating\|ambulating\|ambulatory)\b` |
-| `follow_up_plan` | *(no rule exists yet)* | — always flagged `INSUFFICIENT SOURCE`, regardless of note content |
+| `follow_up_plan` | `follow-up`, `follow up`, `f/u`, `return to clinic`, `recheck`, or `re-evaluate` | `\b(follow-up\|follow up\|f/u\|return to clinic\|recheck\|re-evaluate)\b` |
 
 A line that matches none of these gets no tag and never reaches a section —
 its content is simply invisible to the generator, not summarized and not
@@ -72,9 +72,11 @@ line 30 — CT abdomen ordered for suspected obstruction.
 line 48 — Pt tolerating regular diet, ambulating with assistance.
 ```
 
-**Example that does *not* work** (no line matches any tag — every section
-comes back `INSUFFICIENT SOURCE`, even against a live Claude/Gemini backend,
-because the lines never reach the generator):
+**Example where most lines still don't route** (lines 12/27/33 match no tag —
+`10mg` has no space before `mg`, so `\bmg\b` doesn't match, and chest
+tightness/ECG findings aren't covered by any rule — so those three stay
+invisible to the generator regardless of backend. Line 45 now routes to
+`follow_up_plan`):
 
 ```
 line 12 — Lisinopril 10mg daily, started for new hypertension diagnosis.
@@ -82,6 +84,11 @@ line 27 — Pt reports intermittent chest tightness, denies radiation to arm/jaw
 line 33 — ECG within normal limits, no ST changes noted.
 line 45 — Follow-up with cardiology in 2 weeks recommended.
 ```
+
+Produces:
+- **Discharge Medications:** `INSUFFICIENT SOURCE — clinician input required`
+- **Hospital Course:** `INSUFFICIENT SOURCE — clinician input required`
+- **Follow-up Plan:** "Follow-up with cardiology in 2 weeks recommended." — cited to line 45
 
 ### Review UI (local)
 
