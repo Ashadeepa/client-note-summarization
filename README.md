@@ -50,7 +50,7 @@ npm run dev
 
 Open http://localhost:5173. Live backends (Claude/Gemini) need the corresponding API key set in the terminal running `uvicorn` before you start it. The API has no send/export endpoint — draft-only, per docs/design.md Section 3.
 
-## Docs
+## Documenation
 
 - [`docs/design.md`](./docs/design.md) — full system design: requirement framing, architecture and AI leverage, the control plane, dev-to-deployment and data migration, a worked end-to-end use case, and business handoff.
 - [`docs/architecture-pipeline.svg`](./docs/architecture-pipeline.svg) — the citation-bound generation → verification → coverage-check → clinician-review pipeline, all inside the no-egress boundary.
