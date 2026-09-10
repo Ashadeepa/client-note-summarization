@@ -32,6 +32,57 @@ pytest -q
 
 To try your own note, write a text file using the same `line N — text` format as `examples/sample_note.txt` and pass its path instead.
 
+### Writing a note that actually generates a draft
+
+Section extraction (`src/clinical_summarization/ingest.py`) is deterministic
+keyword tagging, not a model call — a line only reaches the generator if its
+text matches one of these regexes:
+
+| Section | Line must contain | Regex |
+|---|---|---|
+| `discharge_medications` | `mg`, `bid`, `tid`, `qd`, `dose`, or `continued on discharge` | `\b(mg\|bid\|tid\|qd\|dose\|continued on discharge)\b` |
+| `hospital_course` | `tolerating`, `ambulating`, or `ambulatory` | `\b(tolerating\|ambulating\|ambulatory)\b` |
+| `follow_up_plan` | *(no rule exists yet)* | — always flagged `INSUFFICIENT SOURCE`, regardless of note content |
+
+A line that matches none of these gets no tag and never reaches a section —
+its content is simply invisible to the generator, not summarized and not
+flagged as missing. Word boundaries matter too: `10mg` (no space) does not
+match `\bmg\b`; `10 mg` does.
+
+**Example that works** (mirrors `examples/sample_note.txt`):
+
+```
+line 42 — Metformin 500mg BID, continued on discharge.
+line 58 — CT chest ordered 3/2 for persistent cough.
+line 61 — Pt tolerating oral intake well, ambulating independently.
+```
+
+Produces:
+- **Discharge Medications:** "Metformin 500mg BID was continued on discharge." — cited to line 42
+- **Hospital Course:** "The patient is tolerating oral intake well and ambulating independently." — cited to line 61
+- **Follow-up Plan:** `INSUFFICIENT SOURCE — clinician input required`
+- **Open loop:** line 58 (CT ordered, no result in chart — nothing routes `ordered` lines to a section, so it surfaces here instead of being dropped)
+
+**Example with two medication lines:**
+
+```
+line 15 — Atorvastatin 20mg qd, continued on discharge.
+line 22 — Furosemide dose adjusted for renal function.
+line 30 — CT abdomen ordered for suspected obstruction.
+line 48 — Pt tolerating regular diet, ambulating with assistance.
+```
+
+**Example that does *not* work** (no line matches any tag — every section
+comes back `INSUFFICIENT SOURCE`, even against a live Claude/Gemini backend,
+because the lines never reach the generator):
+
+```
+line 12 — Lisinopril 10mg daily, started for new hypertension diagnosis.
+line 27 — Pt reports intermittent chest tightness, denies radiation to arm/jaw.
+line 33 — ECG within normal limits, no ST changes noted.
+line 45 — Follow-up with cardiology in 2 weeks recommended.
+```
+
 ### Review UI (local)
 
 A small React app for trying the pipeline interactively — paste/edit a note, pick a backend, see the draft with citations, coverage flags, and open loops rendered.
