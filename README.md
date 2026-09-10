@@ -63,6 +63,23 @@ Produces:
 - **Follow-up Plan:** `INSUFFICIENT SOURCE — clinician input required`
 - **Open loop:** line 58 (CT ordered, no result in chart — nothing routes `ordered` lines to a section, so it surfaces here instead of being dropped)
 
+**Example with all three sections covered** (add a follow-up line to the
+sample note above):
+
+```
+line 42 — Metformin 500mg BID, continued on discharge.
+line 58 — CT chest ordered 3/2 for persistent cough.
+line 61 — Pt tolerating oral intake well, ambulating independently.
+line 70 — Follow-up with primary care in 2 weeks recommended.
+```
+
+Produces:
+- **Discharge Medications:** "Metformin 500mg BID, continued on discharge." — cited to line 42
+- **Hospital Course:** "Pt tolerating oral intake well, ambulating independently." — cited to line 61
+- **Follow-up Plan:** "Follow-up with primary care in 2 weeks recommended." — cited to line 70
+- **Coverage:** all three fields `OK` — nothing flagged `INSUFFICIENT SOURCE`
+- **Open loop:** line 58 still surfaces (CT ordered, no result in chart), since `order` isn't routed to any section
+
 **Example with two medication lines:**
 
 ```
